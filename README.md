@@ -2,32 +2,28 @@
 
 Code release for **Diffusion-based Reinforcement Learning via Q-weighted Variational Policy Optimization (NeurIPS 2024)**.
 
-[[paper]](https://arxiv.org/abs/2405.16173) [[project page]](#)
+[[paper]](https://arxiv.org/abs/2405.16173) [[project page]](https://dingsht.tech/qvpo-webpage/)
 
-![](./imgs/QVPO_pipeline.jpg)
+![](./asset/qvpo.png)
 
 ## Requirements
+Installations of [PyTorch](https://pytorch.org/) and [MuJoCo](https://github.com/deepmind/mujoco) are needed. 
+A suitable [conda](https://conda.io) environment named `qvpo` can be created and activated with:
+```
+conda create qvpo
+conda activate qvpo
+```
+To get started, install the additionally required python packages into you environment.
+```
+pip install -r requirements.txt
 ```
 
+## Running
+Running experiments based our code could be quite easy, so below we use `HalfCheetah-v3` task as an example. 
+
 ```
-## Preparation
-
-To run the experiments, you need to first install the python package rpo via running `pip install -e .` in the current directory.
-
-## Getting started
-Then, you can simply 
-
-run `python scripts/cart_exp.py` to re-implement our experiments on the Safe Cartpole environment using RPODDPG algorithm.
-
-run `python scripts/pen_exp.py` to re-implement our experiments on the Spring Pendulum environment using RPODDPG algorithm.
-
-run `python scripts/evopf_exp.py` to re-implement our experiments on the OPF with Battery Energy Storage environment using RPODDPG algorithm.
-
-run `python scripts/cart_exp_sac.py` to re-implement our experiments on the Safe Cartpole environment using RPOSAC algorithm.
-
-run `python scripts/pen_exp_sac.py` to re-implement our experiments on the Spring Pendulum environment using RPOSAC algorithm.
-
-run `python scripts/evopf_exp_sac.py` to re-implement our experiments on the OPF with Battery Energy Storage environment using RPOSAC algorithm.
+python main.py --env_name HalfCheetah-v3--weighted --aug
+```
 
 ## Citation
 If you find this repository useful in your research, please consider citing:
@@ -41,3 +37,8 @@ booktitle={The Thirty-eighth Annual Conference on Neural Information Processing 
 year={2024},
 url={https://openreview.net/forum?id=UWUUVKtKeu}
 }
+```
+
+## Acknowledgement
+
+The code of QVPO is based on the implementation of [DIPO](https://github.com/BellmanTimeHut/DIPO).
