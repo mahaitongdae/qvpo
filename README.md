@@ -30,12 +30,12 @@ If you find this repository useful in your research, please consider citing:
 
 ```
 @inproceedings{
-anonymous2024diffusionbased,
+ding2024diffusionbased,
 title={Diffusion-based Reinforcement Learning via Q-weighted Variational Policy Optimization},
 author={Shutong Ding and Ke Hu and Zhenhao Zhang and Kan Ren and Weinan Zhang and Jingyi Yu, Jingya Wang and Ye Shi},
 booktitle={The Thirty-eighth Annual Conference on Neural Information Processing Systems},
 year={2024},
-url={https://openreview.net/forum?id=UWUUVKtKeu}
+url={https://arxiv.org/abs/2405.16173}
 }
 ```
 
