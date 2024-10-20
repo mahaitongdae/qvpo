@@ -2,7 +2,7 @@
 
 Code release for **Diffusion-based Reinforcement Learning via Q-weighted Variational Policy Optimization (NeurIPS 2024)**.
 
-[[paper]](#) [[project page]](#)
+[[paper]](https://arxiv.org/abs/2405.16173) [[project page]](#)
 
 ![](./imgs/QVPO_pipeline.jpg)
 
