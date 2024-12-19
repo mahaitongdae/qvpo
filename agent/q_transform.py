@@ -20,6 +20,16 @@ class QEXPN(QTransform):
         q.clamp_(min=-8.0, max=8.0)
         q = torch.exp(beta * q)
         return q
+    
+class QEXP(QTransform):
+    def __call__(self, q, **kwargs):
+        # running_q_std = kwargs.get("running_q_std", None)
+        # running_q_mean = kwargs.get("running_q_mean", None)
+        beta = kwargs.get("beta", 1.0)
+        # q = (q - running_q_mean) / running_q_std
+        q.clamp_(min=-8.0, max=8.0)
+        q = torch.exp(beta * q)
+        return q
 
 class QCut(QTransform):
     def __call__(self, q, **kwargs):
@@ -56,3 +66,4 @@ qexpn = QEXPN()
 qcut0n = QCutN(0.0)
 qcut1n = QCutN(1.0)
 qadv = QAdv()
+qexp = QEXP()

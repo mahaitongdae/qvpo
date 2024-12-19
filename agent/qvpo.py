@@ -12,6 +12,7 @@ from agent.vae import VAE
 from agent.helpers import EMA
 from agent.q_transform import *
 import os
+import time
 
 
 class QVPO(object):
@@ -109,7 +110,7 @@ class QVPO(object):
     def action_aug(self, batch_size, log_writer, return_mean_std=False):
         states, actions, rewards, next_states, masks = self.memory.sample(batch_size)
         old_states = states
-        states, best_actions, v_target, (mean, std) = self.actor.sample_n(states, times=self.train_sample, chosen=self.chosen, q_func=self.critic, origin=actions)
+        states, best_actions, v_target, (mean, std) = self.actor.sample_n(states, times=self.train_sample, chosen=self.chosen, q_func=self.critic) #  origin=actions
         v = v_target[1]
 
         if return_mean_std:
@@ -161,6 +162,7 @@ class QVPO(object):
             states, actions, rewards, next_states, masks = self.memory.sample(batch_size)
 
             """ Q Training """
+            start_time = time.time()
             current_q1, current_q2 = self.critic(states, actions)
 
             next_actions = self.actor_target(next_states, eval=False, q_func=self.critic_target)
@@ -179,6 +181,8 @@ class QVPO(object):
                 # if self.step % 10 == 0:
                 #     log_writer.add_scalar('Critic Grad Norm', critic_grad_norms.max().item(), self.step)
             self.critic_optimizer.step()
+            q_time = time.time()
+            q_training_time = q_time - start_time
 
             """ Policy Training """
             if t % self.policy_freq == 0:
@@ -186,9 +190,13 @@ class QVPO(object):
                     if self.gradient:
                         states, best_actions, qv, (mean, std) = self.aug_gradient(batch_size, log_writer, return_mean_std=True)
                     else:
+                        # By default goes to here
                         states, best_actions, qv, (mean, std) = self.action_aug(batch_size, log_writer, return_mean_std=True)
                 else:
                     states, best_actions, (mean, std) = self.action_gradient(batch_size, log_writer, return_mean_std=True)
+
+                after_sample_time = time.time()
+                action_sample_time = after_sample_time - q_time
 
                 if self.policy_type == 'Diffusion' and self.weighted:
                     if self.aug:
@@ -232,6 +240,9 @@ class QVPO(object):
                     #     log_writer.add_scalar('Actor Grad Norm', actor_grad_norms.max().item(), self.step)
                 self.actor_optimizer.step()
 
+            after_action_training_time = time.time()
+            policy_training_time = after_action_training_time - after_sample_time
+
             """ Step Target network """
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
@@ -241,6 +252,12 @@ class QVPO(object):
                     target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
             self.step += 1
+
+            if self.step % 10 == 0:
+                log_writer.add_scalar('time/q_training_time', q_training_time, self.step)
+                log_writer.add_scalar('time/action_sample_time', action_sample_time, self.step)
+                log_writer.add_scalar('time/policy_training_time', policy_training_time, self.step)
+                log_writer.flush()
 
     def save_model(self, dir, id=None):
         if not os.path.exists(dir):
@@ -316,3 +333,103 @@ class QVPO(object):
         states = states.unsqueeze(1).repeat(1, rep, 1).view(rep*state_shape, -1)
         q1, q2 = self.critic(states, actions)
         return q1.view(state_shape, rep, 1), q2.view(state_shape, rep, 1)
+    
+
+class QVPOv2(QVPO):
+
+    def __init__(self, args, state_dim, action_space, memory, diffusion_memory, device):
+        super().__init__(args, state_dim, action_space, memory, diffusion_memory, device)
+        self.args = args
+
+    def train(self, t, iterations, batch_size=256, log_writer=None):
+        for itr in range(iterations):
+            # Sample replay buffer / batch
+            states, actions, rewards, next_states, masks = self.memory.sample(batch_size)
+
+            """ Q Training """
+            start_time = time.time()
+            current_q1, current_q2 = self.critic(states, actions)
+            if self.args.use_action_target:
+                next_actions = self.actor_target(next_states, eval=False, q_func=self.critic_target)
+            else:
+                next_actions = self.actor(next_states, eval=False, q_func=self.critic_target)
+            target_q1, target_q2 = self.critic_target(next_states, next_actions)
+            target_q = torch.min(target_q1, target_q2)
+
+            target_q = (rewards + masks * target_q).detach()
+
+            critic_loss = F.mse_loss(current_q1, target_q) + F.mse_loss(current_q2, target_q)
+
+            self.critic_optimizer.zero_grad()
+            critic_loss.backward()
+            if self.ac_grad_norm > 0:
+                critic_grad_norms = nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.ac_grad_norm,
+                                                             norm_type=2)
+                # if self.step % 10 == 0:
+                #     log_writer.add_scalar('Critic Grad Norm', critic_grad_norms.max().item(), self.step)
+            self.critic_optimizer.step()
+            q_time = time.time()
+            q_training_time = q_time - start_time
+
+            """ Policy Training """
+            if t % self.policy_freq == 0:
+                states, best_actions, qv, (mean, std) = self.action_aug(batch_size, log_writer, return_mean_std=True)
+
+                after_sample_time = time.time()
+                action_sample_time = after_sample_time - q_time
+
+                if self.policy_type == 'Diffusion' and self.weighted:
+                    if self.aug:
+                        q, v = qv
+                    else:
+                        v = None
+                        with torch.no_grad():
+                            q1, q2 = self.critic(states, best_actions)
+                            q = torch.min(q1, q2)
+                    # print("q shape", q.shape)
+                    self.running_q_std += self.alpha_std * (std - self.running_q_std)
+                    self.running_q_mean += self.alpha_mean * (mean - self.running_q_mean)
+                    # q.clamp_(-self.q_neg).add_(self.q_neg)
+                    q = eval(self.q_transform)(q, q_neg=self.q_neg, cut=self.cut, running_q_std=self.running_q_std, beta=self.beta,
+                                               running_q_mean=self.running_q_mean, v=v, batch_size=batch_size, chosen=self.chosen)
+                    if self.entropy_alpha > 0.0:
+                        rand_states = states.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1)
+                        rand_policy_actions = torch.empty(batch_size * self.chosen * 10, actions.shape[-1], device=self.device).uniform_(
+                            -1, 1)
+                        rand_q = q.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1) * self.entropy_alpha
+
+                        best_actions = torch.cat([best_actions, rand_policy_actions], dim=0)
+                        states = torch.cat([states, rand_states], dim=0)
+                        q = torch.cat([q, rand_q], dim=0)
+                    actor_loss = self.actor.loss(best_actions, states, weights=q)
+                else:
+                    actor_loss = self.actor.loss(best_actions, states)
+
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                if self.ac_grad_norm > 0:
+                    actor_grad_norms = nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=self.ac_grad_norm,
+                                                                norm_type=2)
+                    # if self.step % 10 == 0:
+                    #     log_writer.add_scalar('Actor Grad Norm', actor_grad_norms.max().item(), self.step)
+                self.actor_optimizer.step()
+
+            after_action_training_time = time.time()
+            policy_training_time = after_action_training_time - after_sample_time
+
+            """ Step Target network """
+            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+            if self.args.use_action_target:
+                if self.step % self.update_actor_target_every == 0:
+                    for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                        target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+            self.step += 1
+
+            # if self.step % 10 == 0:
+            #     log_writer.add_scalar('time/q_training_time', q_training_time, self.step)
+            #     log_writer.add_scalar('time/action_sample_time', action_sample_time, self.step)
+            #     log_writer.add_scalar('time/policy_training_time', policy_training_time, self.step)
+            #     log_writer.flush()
