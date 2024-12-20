@@ -428,8 +428,8 @@ class QVPOv2(QVPO):
 
             self.step += 1
 
-            # if self.step % 10 == 0:
-            #     log_writer.add_scalar('time/q_training_time', q_training_time, self.step)
-            #     log_writer.add_scalar('time/action_sample_time', action_sample_time, self.step)
-            #     log_writer.add_scalar('time/policy_training_time', policy_training_time, self.step)
-            #     log_writer.flush()
+            if self.step % 10 == 0:
+                log_writer.add_scalar('time/q_training_time', q_training_time, self.step)
+                log_writer.add_scalar('time/action_sample_time', action_sample_time, self.step)
+                log_writer.add_scalar('time/policy_training_time', policy_training_time, self.step)
+                log_writer.flush()

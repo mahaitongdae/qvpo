@@ -98,7 +98,7 @@ def readParser():
     parser.add_argument('--epsilon', type=float, default=0.0, metavar='G', help="eps greedy (default: 0.0)")
     parser.add_argument('--entropy_alpha', type=float, default=0.02, metavar='G', help="entropy_alpha (default: 0.02)")
 
-    parser.add_argument('--use_action_target', type=bool, default=False, action='store_true', help="use target action network")
+    parser.add_argument('--use_action_target', default=False, action='store_true', help="use target action network")
 
 
     return parser.parse_args()
@@ -143,7 +143,7 @@ def main(args=None, logger=None, id=None):
 
     # Initial environment
     env = gym.make(args.env_name)
-    eval_env = copy.deepcopy((env))
+    eval_env = gym.make(args.env_name)
     state_size = int(np.prod(env.observation_space.shape))
     action_size = int(np.prod(env.action_space.shape))
     print(action_size)
