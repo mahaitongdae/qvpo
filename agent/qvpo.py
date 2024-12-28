@@ -110,7 +110,10 @@ class QVPO(object):
     def action_aug(self, batch_size, log_writer, return_mean_std=False):
         states, actions, rewards, next_states, masks = self.memory.sample(batch_size)
         old_states = states
-        states, best_actions, v_target, (mean, std) = self.actor.sample_n(states, times=self.train_sample, chosen=self.chosen, q_func=self.critic) #  origin=actions
+        states, best_actions, v_target, (mean, std) = self.actor.sample_training(states,
+                                                                                 action_samples=self.train_sample,
+                                                                                 chosen=self.chosen,
+                                                                                 q_func=self.critic) #  origin=actions
         v = v_target[1]
 
         if return_mean_std:
@@ -371,16 +374,17 @@ class QVPOv2(QVPO):
                 # if self.step % 10 == 0:
                 #     log_writer.add_scalar('Critic Grad Norm', critic_grad_norms.max().item(), self.step)
             self.critic_optimizer.step()
-            q_time = time.time()
-            q_training_time = q_time - start_time
+            after_q_time = time.time()
+            q_training_time = after_q_time - start_time
 
             """ Policy Training """
             if t % self.policy_freq == 0:
+                # if self.action_sample == 'multi':
                 states, best_actions, qv, (mean, std) = self.action_aug(batch_size, log_writer, return_mean_std=True)
-
+                #
                 after_sample_time = time.time()
-                action_sample_time = after_sample_time - q_time
-
+                action_sample_time = after_sample_time - after_q_time
+                #
                 if self.policy_type == 'Diffusion' and self.weighted:
                     if self.aug:
                         q, v = qv
@@ -390,23 +394,28 @@ class QVPOv2(QVPO):
                             q1, q2 = self.critic(states, best_actions)
                             q = torch.min(q1, q2)
                     # print("q shape", q.shape)
-                    self.running_q_std += self.alpha_std * (std - self.running_q_std)
-                    self.running_q_mean += self.alpha_mean * (mean - self.running_q_mean)
-                    # q.clamp_(-self.q_neg).add_(self.q_neg)
-                    q_weights = eval(self.q_transform)(q, q_neg=self.q_neg, cut=self.cut, running_q_std=self.running_q_std, beta=self.beta,
-                                               running_q_mean=self.running_q_mean, v=v, batch_size=batch_size, chosen=self.chosen)
-                    if self.entropy_alpha > 0.0:
-                        rand_states = states.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1)
-                        rand_policy_actions = torch.empty(batch_size * self.chosen * 10, actions.shape[-1], device=self.device).uniform_(
-                            -1, 1)
-                        rand_q = q_weights.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1) * self.entropy_alpha
+                #     self.running_q_std += self.alpha_std * (std - self.running_q_std)
+                #     self.running_q_mean += self.alpha_mean * (mean - self.running_q_mean)
 
-                        best_actions = torch.cat([best_actions, rand_policy_actions], dim=0)
-                        states = torch.cat([states, rand_states], dim=0)
-                        q_weights = torch.cat([q_weights, rand_q], dim=0)
-                    actor_loss = self.actor.loss(best_actions, states, weights=q_weights)
-                else:
-                    actor_loss = self.actor.loss(best_actions, states)
+                # best_actions = self.actor(states, eval=False, normal=True)
+                # after_sample_time = time.time()
+                # action_sample_time = after_sample_time - after_q_time
+                # q1, q2 = self.critic(states, best_actions)
+                # q = torch.min(q1, q2)
+
+                q_weights = eval(self.q_transform)(q)
+                if self.entropy_alpha > 0.0:
+                    rand_states = states.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1)
+                    rand_policy_actions = torch.empty(batch_size * self.chosen * 10, actions.shape[-1], device=self.device).uniform_(
+                        -1, 1)
+                    rand_q = q_weights.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1) * self.entropy_alpha
+
+                    best_actions = torch.cat([best_actions, rand_policy_actions], dim=0)
+                    states = torch.cat([states, rand_states], dim=0)
+                    q_weights = torch.cat([q_weights, rand_q], dim=0)
+                actor_loss = self.actor.loss(best_actions, states, weights=q_weights)
+                # else:
+                #     actor_loss = self.actor.loss(best_actions, states)
 
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
@@ -418,7 +427,7 @@ class QVPOv2(QVPO):
                 self.actor_optimizer.step()
 
             after_action_training_time = time.time()
-            policy_training_time = after_action_training_time - after_sample_time
+            policy_training_time = after_action_training_time - after_q_time
 
             """ Step Target network """
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):

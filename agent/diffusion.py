@@ -177,21 +177,21 @@ class Diffusion(nn.Module):
 
     # ------------------------------------------ training ------------------------------------------#
     @torch.no_grad()
-    def sample_n(self, state, eval=False, times=32, chosen=1, q_func=None, origin=None):
+    def sample_training(self, state, eval=False, action_samples=32, chosen=1, q_func=None, origin=None):
         self.noise_ratio = self.max_noise_ratio
         old_state = state
         # q1, q2 = q_func(state, origin)
         # q_origin = 0.9 * torch.min(q1, q2) + 0.1 * torch.max(q1, q2)
         raw_batch_size = state.shape[0]
-        state = state.repeat(times, 1)
+        state = state.repeat(action_samples, 1)
         batch_size = state.shape[0]
         shape = (batch_size, self.action_dim)
         action = self.p_sample_loop(state, shape)
         action.clamp_(-1., 1.)
         q1, q2 = q_func(state, action)
         q = torch.min(q1, q2)
-        action = action.view(times, raw_batch_size, -1).transpose(0, 1)
-        q = q.view(times, raw_batch_size, -1).transpose(0, 1)
+        action = action.view(action_samples, raw_batch_size, -1).transpose(0, 1)
+        q = q.view(action_samples, raw_batch_size, -1).transpose(0, 1)
         mean = q.mean()
         std = q.std()
         v = q.mean(dim=1, keepdim=True)
@@ -213,6 +213,13 @@ class Diffusion(nn.Module):
             q, q_idx = torch.topk(q, k=chosen, dim=1)
             action_idx = q_idx.repeat(1, 1, self.action_dim)
             return old_state.repeat(chosen, 1).view(chosen, raw_batch_size, -1).transpose(0,1).contiguous().view(raw_batch_size*chosen, -1), action.gather(dim=1, index=action_idx).view(raw_batch_size*chosen, -1), (q.view(raw_batch_size*chosen, 1), v), (mean, std)
+
+    def sample_simple(self, state, eval=False, times=32, chosen=1, q_func=None, origin=None):
+
+        shape = (state.shape[0], self.action_dim)
+        action = self.p_sample_loop(state, shape)
+        action.clamp_(-1., 1.)
+        return action
 
 
     def q_sample(self, x_start, t, noise=None):

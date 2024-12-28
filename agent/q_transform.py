@@ -23,13 +23,13 @@ class QEXPN(QTransform):
     
 class QEXP(QTransform):
     def __call__(self, q, **kwargs):
-        q = q - (q.mean() / q.std())
+        q = (q - q.mean()) / q.std()
         # running_q_std = kwargs.get("running_q_std", None)
         # running_q_mean = kwargs.get("running_q_mean", None)
-        beta = kwargs.get("beta", 1.0)
+        # beta = kwargs.get("beta", 1.0)
         # q = (q - running_q_mean) / running_q_std
         q.clamp_(min=-3.0, max=3.0)
-        q = torch.exp(beta * q)
+        q = torch.exp(q)
         return q
 
 class QCut(QTransform):
