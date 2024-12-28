@@ -19,7 +19,7 @@ module load python/3.10.12-fasrc01
 mamba activate torch39
 
 # qexp without any change
-python main.py --env_name HalfCheetah-v4 --weighted --aug --seed 0 --q_transform qexp --use_action_target --cuda cpu
+python main.py --env_name HalfCheetah-v3 --weighted --aug --seed 0 --q_transform qexp --use_action_target --cuda cpu
 
 # remove action target
 python main.py --env_name HalfCheetah-v4 --weighted --aug --seed 0  --cuda cpu

@@ -253,10 +253,13 @@ class QVPO(object):
 
             self.step += 1
 
-            if self.step % 10 == 0:
+            if self.step % 50 == 0:
                 log_writer.add_scalar('time/q_training_time', q_training_time, self.step)
                 log_writer.add_scalar('time/action_sample_time', action_sample_time, self.step)
                 log_writer.add_scalar('time/policy_training_time', policy_training_time, self.step)
+                log_writer.add_scalar('stats/q_weights', q.mean().item(), self.step)
+                log_writer.add_scalar('loss/actor_loss', actor_loss.item(), self.step)
+                log_writer.add_scalar('loss/critic_loss', critic_loss.item(), self.step)
                 log_writer.flush()
 
     def save_model(self, dir, id=None):
@@ -390,18 +393,18 @@ class QVPOv2(QVPO):
                     self.running_q_std += self.alpha_std * (std - self.running_q_std)
                     self.running_q_mean += self.alpha_mean * (mean - self.running_q_mean)
                     # q.clamp_(-self.q_neg).add_(self.q_neg)
-                    q = eval(self.q_transform)(q, q_neg=self.q_neg, cut=self.cut, running_q_std=self.running_q_std, beta=self.beta,
+                    q_weights = eval(self.q_transform)(q, q_neg=self.q_neg, cut=self.cut, running_q_std=self.running_q_std, beta=self.beta,
                                                running_q_mean=self.running_q_mean, v=v, batch_size=batch_size, chosen=self.chosen)
                     if self.entropy_alpha > 0.0:
                         rand_states = states.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1)
                         rand_policy_actions = torch.empty(batch_size * self.chosen * 10, actions.shape[-1], device=self.device).uniform_(
                             -1, 1)
-                        rand_q = q.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1) * self.entropy_alpha
+                        rand_q = q_weights.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1) * self.entropy_alpha
 
                         best_actions = torch.cat([best_actions, rand_policy_actions], dim=0)
                         states = torch.cat([states, rand_states], dim=0)
-                        q = torch.cat([q, rand_q], dim=0)
-                    actor_loss = self.actor.loss(best_actions, states, weights=q)
+                        q_weights = torch.cat([q_weights, rand_q], dim=0)
+                    actor_loss = self.actor.loss(best_actions, states, weights=q_weights)
                 else:
                     actor_loss = self.actor.loss(best_actions, states)
 
@@ -428,8 +431,14 @@ class QVPOv2(QVPO):
 
             self.step += 1
 
-            if self.step % 10 == 0:
+            if self.step % 50 == 0:
                 log_writer.add_scalar('time/q_training_time', q_training_time, self.step)
                 log_writer.add_scalar('time/action_sample_time', action_sample_time, self.step)
                 log_writer.add_scalar('time/policy_training_time', policy_training_time, self.step)
+                log_writer.add_scalar('stats/q_avg', q.mean().item(), self.step)
+                log_writer.add_scalar('stats/q_max', q.max().item(), self.step)
+                log_writer.add_scalar('stats/q_min', q.min().item(), self.step)
+                log_writer.add_scalar('stats/q_weights_max', q_weights.max().item(), self.step)
+                log_writer.add_scalar('loss/actor_loss', actor_loss.item(), self.step)
+                log_writer.add_scalar('loss/critic_loss', critic_loss.item(), self.step)
                 log_writer.flush()

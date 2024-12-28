@@ -200,6 +200,9 @@ class Diffusion(nn.Module):
         q_prox = q #- 0.0 / math.sqrt(self.action_dim) * q.std(dim=1, keepdim=True) * q_prox
 
         if chosen == 1:
+            """
+            sample 256*64*act_dim actions, choose the one with max q func on dim 1 (1 out of 64).
+            """
             _, q_idx = torch.max(q_prox, dim=1, keepdim=True)
             action_idx = q_idx.repeat(1, 1, self.action_dim)
             q = q.gather(dim=1, index=q_idx).view(raw_batch_size, 1)

@@ -17,7 +17,7 @@ def readParser():
     parser = argparse.ArgumentParser(description='Diffusion Policy')
     parser.add_argument('--comments', default="remove_actor_target",
                         help='A comment appears in the folder name indicating new attempts')
-    parser.add_argument('--env_name', default="Hopper-v3",
+    parser.add_argument('--env_name', default="HalfCheetah-v3",
                         help='Mujoco Gym environment (default: Hopper-v3)')
     parser.add_argument('--seed', type=int, default=0, metavar='N',
                         help='random seed (default: 0)')
