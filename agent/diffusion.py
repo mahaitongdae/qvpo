@@ -23,7 +23,7 @@ class Diffusion(nn.Module):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.model = Model(state_dim, action_dim)
+        self.model = torch.compile(Model(state_dim, action_dim)) # torch.compile()
 
         self.max_noise_ratio = noise_ratio
         self.noise_ratio = noise_ratio
@@ -82,19 +82,23 @@ class Diffusion(nn.Module):
         '''
         if self.predict_epsilon:
             return (
-                    extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
-                    extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
+                    # extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
+                    # extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
+                    self.sqrt_recip_alphas_cumprod[t] * x_t -
+                    self.sqrt_recipm1_alphas_cumprod[t] * noise
             )
         else:
             return noise
 
     def q_posterior(self, x_start, x_t, t):
         posterior_mean = (
-                extract(self.posterior_mean_coef1, t, x_t.shape) * x_start +
-                extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
+                # extract(self.posterior_mean_coef1, t, x_t.shape) * x_start +
+                # extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
+                self.posterior_mean_coef1[t] * x_start +
+                self.posterior_mean_coef2[t] * x_t
         )
-        posterior_variance = extract(self.posterior_variance, t, x_t.shape)
-        posterior_log_variance_clipped = extract(self.posterior_log_variance_clipped, t, x_t.shape)
+        posterior_variance = self.posterior_variance[t]
+        posterior_log_variance_clipped = self.posterior_log_variance_clipped[t] # extract(self.posterior_log_variance_clipped, t, x_t.shape)
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
     def p_mean_variance(self, x, t, s):
@@ -129,7 +133,7 @@ class Diffusion(nn.Module):
         x = torch.randn(shape, device=device)
 
         for i in reversed(range(0, self.n_timesteps)):
-            timesteps = torch.full((batch_size,), i, device=device, dtype=torch.long)
+            timesteps = torch.full((batch_size, 1), i, device=device, dtype=torch.long)
             x = self.p_sample(x, timesteps, state)
 
         return x
@@ -214,21 +218,15 @@ class Diffusion(nn.Module):
             action_idx = q_idx.repeat(1, 1, self.action_dim)
             return old_state.repeat(chosen, 1).view(chosen, raw_batch_size, -1).transpose(0,1).contiguous().view(raw_batch_size*chosen, -1), action.gather(dim=1, index=action_idx).view(raw_batch_size*chosen, -1), (q.view(raw_batch_size*chosen, 1), v), (mean, std)
 
-    def sample_simple(self, state, eval=False, times=32, chosen=1, q_func=None, origin=None):
-
-        shape = (state.shape[0], self.action_dim)
-        action = self.p_sample_loop(state, shape)
-        action.clamp_(-1., 1.)
-        return action
-
-
     def q_sample(self, x_start, t, noise=None):
         if noise is None:
             noise = torch.randn_like(x_start)
 
         sample = (
-                extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
-                extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
+                # extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
+                # extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
+            self.sqrt_alphas_cumprod[t] * x_start +
+            self.sqrt_one_minus_alphas_cumprod[t] * noise
         )
 
         return sample
@@ -252,7 +250,7 @@ class Diffusion(nn.Module):
 
     def loss(self, x, state, weights=1.0):
         batch_size = len(x)
-        t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
+        t = torch.randint(0, self.n_timesteps, (batch_size, 1), device=x.device).long()
         return self.p_losses(x, state, t, weights)
 
     def forward(self, state, eval=False, q_func=None, normal=False):

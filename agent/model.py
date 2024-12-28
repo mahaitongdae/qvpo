@@ -65,7 +65,7 @@ class Model(nn.Module):
 
     def forward(self, x, time, state):
 
-        t = self.time_mlp(time)
+        t = self.time_mlp(time.squeeze())
         out = torch.cat([x, t, state], dim=-1)
         out = self.layer(out)
 

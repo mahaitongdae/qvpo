@@ -12,6 +12,8 @@ import gym
 import os
 from logger import Logger
 import datetime
+torch.set_float32_matmul_precision('high')
+
 
 def readParser():
     parser = argparse.ArgumentParser(description='Diffusion Policy')

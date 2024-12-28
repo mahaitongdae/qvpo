@@ -393,17 +393,18 @@ class QVPOv2(QVPO):
                         with torch.no_grad():
                             q1, q2 = self.critic(states, best_actions)
                             q = torch.min(q1, q2)
-                    # print("q shape", q.shape)
-                #     self.running_q_std += self.alpha_std * (std - self.running_q_std)
-                #     self.running_q_mean += self.alpha_mean * (mean - self.running_q_mean)
+                    self.running_q_std += self.alpha_std * (std - self.running_q_std)
+                    self.running_q_mean += self.alpha_mean * (mean - self.running_q_mean)
 
                 # best_actions = self.actor(states, eval=False, normal=True)
                 # after_sample_time = time.time()
                 # action_sample_time = after_sample_time - after_q_time
                 # q1, q2 = self.critic(states, best_actions)
                 # q = torch.min(q1, q2)
-
-                q_weights = eval(self.q_transform)(q)
+                q_weights = eval(self.q_transform)(q, q_neg=self.q_neg, cut=self.cut,
+                                                   running_q_std=self.running_q_std, beta=self.beta,
+                                                   running_q_mean=self.running_q_mean, v=v, batch_size=batch_size,
+                                                   chosen=self.chosen)
                 if self.entropy_alpha > 0.0:
                     rand_states = states.unsqueeze(0).expand(10, -1, -1).contiguous().view(batch_size*self.chosen*10, -1)
                     rand_policy_actions = torch.empty(batch_size * self.chosen * 10, actions.shape[-1], device=self.device).uniform_(
